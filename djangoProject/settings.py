@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "test_django_graphql",
     "app2",
+    "zorgs",
 ]
 
 MIDDLEWARE = [
