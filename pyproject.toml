@@ -12,12 +12,12 @@ isort = "^5.12.0"
 black = "^23.10.1"
 gunicorn = "^21.2.0"
 django-environ = "^0.11.2"
-
+strawberry-graphql = {extras = ["debug-server"], version = "^0.210.0"}
+strawberry-graphql-django = "^0.21.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
 
 [tool.black]
 line-length = 120
@@ -30,4 +30,3 @@ use_parentheses = true
 ensure_newline_before_comments = true
 wrap_length = 120
 line_length = 120
-
