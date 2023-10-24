@@ -2,43 +2,37 @@ from django.db import models
 
 
 class Author(models.Model):
-    first_name = models.CharField(max_length=100, help_text="First name")
-    last_name = models.CharField(max_length=100, help_text="Last name")
-    date_of_birth = models.DateField(help_text="Date of birth")
-    date_of_death = models.DateField(help_text="Date of death", null=True)
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    date_of_birth = models.DateField()
+    date_of_death = models.DateField(null=True)
 
     class Meta:
-        db_table = "gql_author"
+        db_table = "app1_author"
 
 
 class Publisher(models.Model):
-    name = models.CharField(max_length=255, help_text="Name")
-    address = models.TextField(help_text="Address")
+    name = models.CharField(max_length=255)
+    address = models.TextField()
 
     class Meta:
-        db_table = "gql_publisher"
+        db_table = "app1_publisher"
 
 
 class Genre(models.Model):
-    name = models.CharField(max_length=100, help_text="Name")
+    name = models.CharField(max_length=100)
 
     class Meta:
-        db_table = "gql_genre"
+        db_table = "app1_genre"
 
 
 class Book(models.Model):
-    title = models.CharField(max_length=255, help_text="Title")
-    summary = models.TextField(help_text="Summary")
-    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books", help_text="Author")
-    publisher = models.ForeignKey(
-        Publisher,
-        on_delete=models.SET_NULL,
-        related_name="books",
-        null=True,
-        help_text="Publisher",
-    )
-    genre = models.ManyToManyField(Genre, related_name="books", help_text="Genre")
-    publish_date = models.DateField(help_text="Publish date")
+    title = models.CharField(max_length=255)
+    summary = models.TextField()
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
+    publisher = models.ForeignKey(Publisher, on_delete=models.SET_NULL, related_name="books", null=True)
+    genre = models.ManyToManyField(Genre, related_name="books")
+    publish_date = models.DateField()
 
     class Meta:
-        db_table = "gql_book"
+        db_table = "app1_book"
