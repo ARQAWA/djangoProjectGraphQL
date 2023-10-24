@@ -12,7 +12,6 @@ isort = "^5.12.0"
 black = "^23.10.1"
 gunicorn = "^21.2.0"
 django-environ = "^0.11.2"
-strawberry-graphql = {extras = ["debug-server"], version = "^0.210.0"}
 strawberry-graphql-django = "^0.21.0"
 
 [build-system]
