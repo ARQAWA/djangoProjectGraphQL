@@ -7,14 +7,23 @@ class Author(models.Model):
     date_of_birth = models.DateField(help_text="Date of birth")
     date_of_death = models.DateField(help_text="Date of death", null=True)
 
+    class Meta:
+        db_table = "gql_author"
+
 
 class Publisher(models.Model):
     name = models.CharField(max_length=255, help_text="Name")
     address = models.TextField(help_text="Address")
 
+    class Meta:
+        db_table = "gql_publisher"
+
 
 class Genre(models.Model):
     name = models.CharField(max_length=100, help_text="Name")
+
+    class Meta:
+        db_table = "gql_genre"
 
 
 class Book(models.Model):
@@ -30,3 +39,6 @@ class Book(models.Model):
     )
     genre = models.ManyToManyField(Genre, related_name="books", help_text="Genre")
     publish_date = models.DateField(help_text="Publish date")
+
+    class Meta:
+        db_table = "gql_book"

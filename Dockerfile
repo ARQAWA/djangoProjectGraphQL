@@ -4,10 +4,9 @@ ENV PYTHONUNBUFFERED 1
 ENV DJANGO_SETTINGS_MODULE=djangoProject.settings
 
 WORKDIR /app
-
-COPY requirements.txt /app/
+COPY . /app/
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY . /app/
+RUN pip list
 
 EXPOSE 8000
