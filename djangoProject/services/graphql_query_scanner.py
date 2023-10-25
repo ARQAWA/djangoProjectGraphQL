@@ -4,7 +4,7 @@ from django.apps import apps
 class GraphQLQueryFabric:
     """This class is responsible for generating GraphQL queries from Django models"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._apps_and_models = self._construct_apps_and_models()
 
     @staticmethod

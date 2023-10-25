@@ -13,6 +13,8 @@ black = "^23.10.1"
 gunicorn = "^21.2.0"
 django-environ = "^0.11.2"
 strawberry-graphql-django = "^0.21.0"
+mypy = "^1.6.1"
+django-stubs = {extras = ["compatible-mypy"], version = "^4.2.6"}
 
 [build-system]
 requires = ["poetry-core"]
@@ -29,3 +31,16 @@ use_parentheses = true
 ensure_newline_before_comments = true
 wrap_length = 120
 line_length = 120
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+strict = true
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "djangoProject.settings"
+strict_settings = true
+
+[mypy.plugins.django-stubs]
+django_settings_module = "djangoProject.settings"
