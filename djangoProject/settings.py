@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "strawberry_django",
     "test_django_graphql",
     "app2",
     "zorgs",

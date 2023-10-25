@@ -12,9 +12,11 @@ isort = "^5.12.0"
 black = "^23.10.1"
 gunicorn = "^21.2.0"
 django-environ = "^0.11.2"
+strawberry-graphql = "^0.211.1"
 strawberry-graphql-django = "^0.21.0"
 mypy = "^1.6.1"
 django-stubs = {extras = ["compatible-mypy"], version = "^4.2.6"}
+inflection = "^0.5.1"
 
 [build-system]
 requires = ["poetry-core"]

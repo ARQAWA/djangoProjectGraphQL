@@ -184,6 +184,17 @@ setproctitle = ["setproctitle"]
 tornado = ["tornado (>=0.2)"]
 
 [[package]]
+name = "inflection"
+version = "0.5.1"
+description = "A port of Ruby on Rails inflector to Python"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "inflection-0.5.1-py2.py3-none-any.whl", hash = "sha256:f38b2b640938a4f35ade69ac3d053042959b62a0f1076a5bbaa1b9526605a8a2"},
+    {file = "inflection-0.5.1.tar.gz", hash = "sha256:1a29730d366e996aaacffb2f1f1cb9593dc38e2ddd30c91250c6dde09ea9b417"},
+]
+
+[[package]]
 name = "isort"
 version = "5.12.0"
 description = "A Python utility / library to sort Python imports."
@@ -434,4 +445,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "3.11.5"
-content-hash = "d791fe78df991eac5758d05dd695b41ca5d7902dde6037dbdf809bdd81a931ac"
+content-hash = "be678a24a11d1fe8629edbcc8bc3ecc8ad17b6bdc001102c062cf1eaf4b4f07b"
