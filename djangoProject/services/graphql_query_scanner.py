@@ -7,7 +7,10 @@ from django.http import HttpResponse
 from strawberry.django.views import AsyncGraphQLView
 from strawberry_django.optimizer import DjangoOptimizerExtension
 
-from djangoProject.services.strawberry_model_mapper import StrawberryModelMapper
+from djangoProject.services.strawberry_model_mapper import (
+    MapperEnum,
+    StrawberryModelMapper,
+)
 
 
 class AsyncAutoGraphQLView:
@@ -19,16 +22,16 @@ class AsyncAutoGraphQLView:
     def as_view(cls) -> Callable[..., HttpResponse]:
         # map all models to types
         for mapping_type in (
-            cls.mappings.enum.Orders,
-            cls.mappings.enum.Filters,
-            cls.mappings.enum.Types,
+            MapperEnum.Orders,
+            MapperEnum.Filters,
+            MapperEnum.Types,
         ):
             for model in cls._get_app_models():
                 cls.mappings.set_strawberry_type(model, mapping_type)
 
         # generate query
         type_dict = {
-            type_name: strawberry.django.field(graphql_type=list[graphql_type])
+            type_name: strawberry.django.field(graphql_type=list[graphql_type])  # type: ignore
             for type_name, graphql_type in cls.mappings.get_graphql_types().items()
         }
 
@@ -43,7 +46,7 @@ class AsyncAutoGraphQLView:
     def _get_app_models() -> list[type[Model]]:
         """Get all Django models from all apps except django.contrib"""
 
-        app_models = []
+        app_models: list[type[Model]] = []
         for app_config in apps.get_app_configs():
             if app_config.name.startswith("django.contrib"):
                 continue
