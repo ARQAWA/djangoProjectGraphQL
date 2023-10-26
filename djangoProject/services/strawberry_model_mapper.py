@@ -1,10 +1,17 @@
 from enum import Enum
-from typing import cast
+from typing import (
+    Any,
+    List,
+    cast,
+)
 
 import inflection
 import strawberry
 import strawberry.django
-from django.db.models import Model
+from django.db.models import (
+    ManyToManyField,
+    Model,
+)
 from django.db.models.options import Options
 
 
@@ -22,6 +29,18 @@ class StrawberryModelMapper:
     _apps_names_camel_names: dict[str, str] = {}
     _apps_camel_names_unique: set[str] = set()
     _apps_models_names: dict[str, str] = {}
+    _apps_models_backrefs: dict[str, tuple[str, Model]] = {}
+
+    @classmethod
+    def _set_backrefs(cls, model: type[Model]) -> None:
+        """
+        Set backrefs for model
+
+        Args:
+            model: Django model
+        """
+
+        model_meta = cast(Options, getattr(model, "_meta"))
 
     @classmethod
     def _regisetr_app_name_camel(cls, app_name: str) -> None:
@@ -112,16 +131,22 @@ class StrawberryModelMapper:
         if hasattr(map_class, app_model_name_camel):
             return
 
-        fields = {}
+        fields: dict[str, Any] = {}
         for field in model_meta.fields:
-            field_type = strawberry.auto
-            if field.is_relation:
-                if field.hidden:
-                    continue
-                related_model = cast(type[Model], field.related_model)
+            if not field.hidden:
+                field_type = strawberry.auto
+                if field.is_relation:
+                    related_model = cast(type[Model], field.related_model)
+                    cls.set_strawberry_type(related_model, mapping_type)
+                    field_type = getattr(map_class, cls._get_app_model_name_camel(related_model))
+                fields[field.name] = field_type
+
+        if many_to_many := cast(tuple[ManyToManyField], getattr(model_meta, "many_to_many")):  # type: ignore
+            for many_to_many_field in many_to_many:
+                related_model = cast(type[Model], many_to_many_field.related_model)
                 cls.set_strawberry_type(related_model, mapping_type)
-                field_type = getattr(map_class, cls._get_app_model_name_camel(related_model))
-            fields[field.name] = field_type
+                mm_field_type = getattr(map_class, cls._get_app_model_name_camel(related_model))
+                fields[many_to_many_field.name] = List[mm_field_type]  # type: ignore
 
         strawberry_obj_name = f"{app_model_name_camel}{mapping_type.value}"
         strawberry_obj_class = type(strawberry_obj_name, (), {"__annotations__": fields})

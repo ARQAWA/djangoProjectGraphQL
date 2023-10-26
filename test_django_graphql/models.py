@@ -31,7 +31,7 @@ class Book(models.Model):
     summary = models.TextField()
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
     publisher = models.ForeignKey(Publisher, on_delete=models.SET_NULL, related_name="books", null=True)
-    genre = models.ManyToManyField(Genre, related_name="books")
+    genres = models.ManyToManyField(Genre, related_name="books")
     publish_date = models.DateField()
 
     class Meta:

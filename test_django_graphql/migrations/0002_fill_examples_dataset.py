@@ -50,7 +50,7 @@ def create_data(apps: StateApps, _schema_editor: BaseDatabaseSchemaEditor) -> No
         Book.objects.bulk_create(books)
 
         for i, book in enumerate(Book.objects.all()):
-            book.genre.add(genres[i % 8])
+            book.genres.add(genres[i % 8])
 
 
 class Migration(migrations.Migration):
