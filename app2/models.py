@@ -8,7 +8,7 @@ class Sign(models.Model):
 class Author(models.Model):
     name = models.CharField(max_length=200)
     bio = models.TextField(blank=True)
-    sign = models.OneToOneField(Sign, related_name="author", on_delete=models.CASCADE)
+    sign = models.OneToOneField(Sign, related_name="author", related_query_name="author", on_delete=models.CASCADE)
 
 
 class Tag(models.Model):

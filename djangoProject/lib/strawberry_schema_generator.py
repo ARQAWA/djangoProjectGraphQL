@@ -1,4 +1,3 @@
-import pprint
 from collections import deque
 from enum import Enum
 from typing import (
@@ -13,6 +12,7 @@ import strawberry.django
 from django.apps import apps
 from django.db.models import (
     Field,
+    ForeignKey,
     ManyToManyField,
     Model,
 )
@@ -24,10 +24,12 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 __all__ = ("AsyncAutoGraphQLView",)
 
 ModelPath, AppName, AppModelName, FieldName, IsManyRelation = str, str, str, str, bool
-RelationFieldSetterArgs = tuple[AppModelName, Field, type[Model]]
+RelationFieldSetterArgs = tuple[AppModelName, Field, type[Model]]  # type: ignore
 
 
 class Mapper:
+    """Django models to strawberry types mapper"""
+
     class Types(Enum):
         """Enum for mapping types"""
 
@@ -90,10 +92,7 @@ class Mapper:
 
         return app_name
 
-    def _claim_model_name(
-        self,
-        model: type[Model],
-    ) -> AppModelName:
+    def _claim_model_name(self, model: type[Model]) -> AppModelName:
         """
         Claim unique name camel cased for model
 
@@ -117,19 +116,16 @@ class Mapper:
 
         return model_name
 
-    def _put_relation_field(
-        self,
-        model: type[Model],
-        field: Field,
-    ) -> None:
+    def _put_relation_field(self, model: type[Model], field: Field) -> None:
         """Put relation field to queue"""
 
-        model_name = self._claim_model_name(model)
         related_model = cast(type[Model], field.related_model)
-        self._relations_setter_queue.append((model_name, field, related_model))
-        related_model_name = self._claim_model_name(related_model)
-        remote_field = cast(Field, field.remote_field)
-        self._relations_setter_queue.append((related_model_name, remote_field, model))
+        self._relations_setter_queue.append((self._claim_model_name(model), field, related_model))
+
+        if isinstance(field, ForeignKey):
+            related_model_name = self._claim_model_name(related_model)
+            remote_field = cast(Field, field.remote_field)
+            self._relations_setter_queue.append((related_model_name, remote_field, model))
 
     def _apply_fields_relations(self) -> None:
         """Register relations fields"""
@@ -149,10 +145,6 @@ class Mapper:
             mapped_type = self._types_by_model_names[model_name]
             mapped_type.__annotations__[field_name] = field_type
 
-            # pprint.pprint((mapped_type.__name__, mapped_type.__annotations__))
-
-            # ...
-
     def _apply_strawberry_decorators(self):
         """Apply strawberry decorators to types"""
 
@@ -163,7 +155,7 @@ class Mapper:
                 case self.Types.Orders:
                     strawberry.django.order(model, name=name)(model_type)
                 case self.Types.Filters:
-                    strawberry.django.filter(model, name=name, lookups=True)(model_type)
+                    strawberry.django.filter(model, name=name)(model_type)
                 case self.Types.Types:
                     strawberry.django.type(model, name=name)(model_type)
 
@@ -185,7 +177,7 @@ class Mapper:
         for field in model_meta.fields:  # type: Field
             if not field.hidden:
                 field_dict[field.name] = strawberry.auto
-                if field.is_relation:
+                if field.is_relation and not field.one_to_one:
                     self._put_relation_field(model, field)
 
         for mm_field in model_meta.many_to_many:  # type: ManyToManyField
