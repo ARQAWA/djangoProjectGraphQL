@@ -1,189 +1,240 @@
+from collections import deque
 from enum import Enum
 from typing import (
     Any,
-    List,
+    Callable,
     cast,
 )
 
 import inflection
 import strawberry
 import strawberry.django
+from django.apps import apps
 from django.db.models import (
+    Field,
     ManyToManyField,
     Model,
 )
 from django.db.models.options import Options
+from django.http import HttpResponse
+from strawberry.django.views import AsyncGraphQLView
+from strawberry_django.optimizer import DjangoOptimizerExtension
+
+__all__ = ("AsyncAutoGraphQLView",)
+
+ModelPath, AppName, AppModelName, FieldName, IsManyRelation = str, str, str, str, bool
+RelationFieldSetterArgs = tuple[AppModelName, Field[str], type[Model]]
 
 
-class MapperEnum(Enum):
-    """Enum for mapping types"""
+class Mapper:
+    class Types(Enum):
+        """Enum for mapping types"""
 
-    Types = "Types"
-    Filters = "Filters"
-    Orders = "Orders"
+        Types = "Types"
+        Filters = "Filters"
+        Orders = "Orders"
 
+    def __init__(self, map_type: Types):
+        self._map_type = map_type
 
-class StrawberryModelMapper:
-    """Mapper for Django models to strawberry types"""
+        # apps names
+        self._apps_names_unique: set[AppName] = set()
+        self._app_name_by_app_config_names: dict[str, AppName] = {}
 
-    _apps_names_camel_names: dict[str, str] = {}
-    _apps_camel_names_unique: set[str] = set()
-    _apps_models_names: dict[str, str] = {}
-    _apps_models_backrefs: dict[str, tuple[str, Model]] = {}
+        # app models names
+        self._model_names_unique: set[AppModelName] = set()
+        self._model_names_by_model_paths: dict[ModelPath, AppModelName] = {}
 
-    @classmethod
-    def _set_backrefs(cls, model: type[Model]) -> None:
+        # scheme type dicts
+        self._types_by_model_names: dict[AppModelName, type] = {}
+
+        self._relations_setter_queue: deque[RelationFieldSetterArgs] = deque()
+
+    @property
+    def map(self) -> dict[AppModelName, type]:
+        return self._types_by_model_names
+
+    @staticmethod
+    def _claim_unique_str(str_base: str, uniques: set[str]) -> str:
+        """Claim unique string by adding number to base string"""
+
+        count = 0
+        result = str_base
+        while True:
+            if result not in uniques:
+                return result
+            count += 1
+            result = f"{str_base}{count}"
+
+    @staticmethod
+    def _get_meta(model: type[Model]) -> Options:
+        return cast(Options, getattr(model, "_meta"))  # type: ignore
+
+    def _claim_app_name(self, model: type[Model]) -> AppName:
         """
-        Set backrefs for model
+        Claim unique name for app
 
-        Args:
-            model: Django model
+        :param model: Django model type
+        :return: app name
         """
 
-        model_meta = cast(Options, getattr(model, "_meta"))
+        model_meta = self._get_meta(model)
 
-    @classmethod
-    def _regisetr_app_name_camel(cls, app_name: str) -> None:
-        """
-        Register app name camel cased
+        app_name = self._app_name_by_app_config_names.get(model_meta.app_config.name)
+        if app_name is None:
+            app_name = self._claim_unique_str(inflection.camelize(model_meta.app_config.name), self._apps_names_unique)
+            self._apps_names_unique.add(app_name)
+            self._app_name_by_app_config_names[model_meta.app_config.name] = app_name
 
-        Args:
-            app_name: name of the app
-        """
+        return app_name
 
-        if app_name in cls._apps_names_camel_names:
-            return
-
-        app_name_camel = inflection.camelize(app_name)
-        if app_name_camel in cls._apps_camel_names_unique:
-            app_name_camel += "1"
-
-        cls._apps_camel_names_unique.add(app_name_camel)
-        cls._apps_names_camel_names[app_name] = app_name_camel
-
-    @classmethod
-    def _get_app_model_name_camel(cls, model: type[Model]) -> str:
-        """
-        Get app model name camel cased by app name and model name
-
-        Args:
-            model: Django model
-
-        Returns:
-            camel cased app model name
-        """
-
-        model_meta = cast(Options, getattr(model, "_meta"))  # type: ignore
-
-        app_model_key = f"{model_meta.app_config.name}.{model_meta.object_name}"
-        app_model_name_camel = cls._apps_models_names.get(app_model_key, None)
-        if app_model_name_camel is None:
-            # get app name camel cased
-            app_name = model_meta.app_config.name
-            app_name_camel = cls._apps_names_camel_names.get(app_name, None)
-            if app_name_camel is None:
-                cls._regisetr_app_name_camel(app_name)
-            app_name_camel = cls._apps_names_camel_names[app_name]
-
-            # register app model name camel cased
-            camelized_object_name = inflection.camelize(str(model_meta.object_name))
-            app_model_name_camel = f"{app_name_camel}{camelized_object_name}"
-            cls._apps_models_names[app_model_key] = app_model_name_camel
-
-        return app_model_name_camel
-
-    @classmethod
-    def _get_map_class(cls, mapping_type: MapperEnum) -> type:
-        """
-        Get map class for mapping type
-
-        Args:
-            mapping_type: type of mapping
-        Returns:
-            map class
-        """
-        map_class = getattr(cls, mapping_type.value, None)
-
-        if map_class is None:
-            map_class = type(mapping_type.value, (), {})
-            setattr(cls, mapping_type.value, map_class)
-
-        return map_class
-
-    @classmethod
-    def set_strawberry_type(
-        cls,
+    def _claim_model_name(
+        self,
         model: type[Model],
-        mapping_type: MapperEnum,
+    ) -> AppModelName:
+        """
+        Claim unique name camel cased for model
+
+        :param model: Django model type
+        :return: model name camel cased
+        """
+
+        model_meta = self._get_meta(model)
+
+        object_name = cast(str, model_meta.object_name)
+        model_path = f"{model_meta.app_config.name}.{object_name}"
+
+        model_name = self._model_names_by_model_paths.get(model_path)
+        if model_name is None:
+            model_name = self._claim_unique_str(
+                inflection.camelize(f"{self._claim_app_name(model)}{object_name}"),
+                self._model_names_unique,
+            )
+            self._model_names_unique.add(model_name)
+            self._model_names_by_model_paths[model_path] = model_name
+
+        return model_name
+
+    def _put_relation_field(
+        self,
+        model: type[Model],
+        field: Field,
     ) -> None:
+        """Put relation field to queue"""
+
+        model_name = self._claim_model_name(model)
+        related_model = cast(type[Model], field.related_model)
+        related_model_name = self._claim_model_name(related_model)
+        self._relations_setter_queue.append((model_name, field, related_model))
+        remote_field = cast(Field, field.remote_field)
+        self._relations_setter_queue.append((related_model_name, remote_field, model))
+
+    def _apply_fields_relations(self) -> None:
+        """Register relations fields"""
+
+        while len(self._relations_setter_queue):
+            model_name, field, related_model = self._relations_setter_queue.popleft()
+
+            self._set_type_to_map(related_model)
+            related_model_name = self._claim_model_name(related_model)
+
+            field_name = field.name
+            field_type = self._types_by_model_names[related_model_name]
+
+            mapped_type = self._types_by_model_names[model_name]
+            setattr(mapped_type, field_name, field_type)
+
+    def _set_type_to_map(self, model: type[Model]) -> None:
         """
-        Set model for mapping
+        Set field dict for model
 
-        Args:
-            model: Django model
-            mapping_type: type of mapping
+        :param model: Django model type
         """
 
-        app_model_name_camel = cls._get_app_model_name_camel(model)
-        model_meta = cast(Options, getattr(model, "_meta"))  # type: ignore
+        model_name = self._claim_model_name(model)
 
-        map_class = cls._get_map_class(mapping_type)
-        if hasattr(map_class, app_model_name_camel):
+        if model_name in self._types_by_model_names:
             return
 
-        fields: dict[str, Any] = {}
-        for field in model_meta.fields:
+        model_meta = self._get_meta(model)
+
+        field_dict: dict[FieldName, Any] = {}
+        for field in model_meta.fields:  # type: Field
             if not field.hidden:
-                field_type = strawberry.auto
+                field_dict[field.name] = strawberry.auto
                 if field.is_relation:
-                    related_model = cast(type[Model], field.related_model)
-                    cls.set_strawberry_type(related_model, mapping_type)
-                    field_type = getattr(map_class, cls._get_app_model_name_camel(related_model))
-                fields[field.name] = field_type
+                    self._put_relation_field(model, field)
 
-        if many_to_many := cast(tuple[ManyToManyField], getattr(model_meta, "many_to_many")):  # type: ignore
-            for many_to_many_field in many_to_many:
-                related_model = cast(type[Model], many_to_many_field.related_model)
-                cls.set_strawberry_type(related_model, mapping_type)
-                mm_field_type = getattr(map_class, cls._get_app_model_name_camel(related_model))
-                fields[many_to_many_field.name] = List[mm_field_type]  # type: ignore
+        for mm_field in model_meta.many_to_many:  # type: ManyToManyField
+            self._put_relation_field(model, mm_field)
 
-        strawberry_obj_name = f"{app_model_name_camel}{mapping_type.value}"
-        strawberry_obj_class = type(strawberry_obj_name, (), {"__annotations__": fields})
+        model_type_name = f"{model_name}{str(self._map_type.value)}"
+        self._types_by_model_names[model_name] = type(model_type_name, (), {"__annotations__": field_dict})
 
-        match mapping_type:
-            case mapping_type.Orders:
-                strawberry_decorator = strawberry.django.order(model, name=strawberry_obj_name)
-            case mapping_type.Filters:
-                strawberry_decorator = strawberry.django.filter(model, name=strawberry_obj_name, lookups=True)
-            case mapping_type.Types:
-                orders = getattr(cls._get_map_class(mapping_type.Orders), app_model_name_camel)
-                filters = getattr(cls._get_map_class(mapping_type.Filters), app_model_name_camel)
-                strawberry_decorator = strawberry.django.type(
-                    model,
-                    name=strawberry_obj_name,
-                    filters=filters,
-                    order=orders,
-                    pagination=True,
+        match self._map_type:
+            case self.Types.Orders:
+                strawberry.django.order(model, name=model_type_name)(self._types_by_model_names[model_name])
+            case self.Types.Filters:
+                (
+                    strawberry.django.filter(model, name=model_type_name, lookups=True)(
+                        self._types_by_model_names[model_name]
+                    )
                 )
-            case _:
-                raise ValueError(f"Unknown mapping type: {mapping_type.value}")
+            case self.Types.Types:
+                strawberry.django.type(model, name=model_type_name)(self._types_by_model_names[model_name])
 
-        setattr(map_class, app_model_name_camel, strawberry_decorator(strawberry_obj_class))
+    def register_tpyes_from_models(self, models: list[type[Model]]) -> "Mapper":
+        """
+        Register models dicts
+
+        :param models: Django models types
+        """
+
+        for model in models:
+            self._set_type_to_map(model)
+
+        self._apply_fields_relations()
+
+        return self
+
+
+class AsyncAutoGraphQLView:
+    """Class for automatic GraphQL schema generation based on Django models"""
 
     @classmethod
-    def get_graphql_types(cls) -> dict[str, type]:
-        """
-        Get strawberry models types by their names camel cased
+    def as_view(cls) -> Callable[..., HttpResponse]:
+        app_models = cls._get_app_models()
+        filters = Mapper(Mapper.Types.Filters).register_tpyes_from_models(app_models).map
+        orders = Mapper(Mapper.Types.Orders).register_tpyes_from_models(app_models).map
+        types = Mapper(Mapper.Types.Types).register_tpyes_from_models(app_models).map
 
-        Returns:
-            dictionary of strawberry models types
-        """
+        # generate query
+        type_dict = {
+            type_name: strawberry.django.field(
+                graphql_type=list[types[type_name]],
+                filters=filters[type_name],
+                order=orders[type_name],
+                pagination=True,
+            )  # type: ignore
+            for type_name in types
+        }
 
-        map_class = cls._get_map_class(MapperEnum.Types)
+        return AsyncGraphQLView.as_view(
+            schema=strawberry.Schema(
+                query=strawberry.type()(type("AutoGeneratedQuery", (), type_dict)),
+                extensions=[DjangoOptimizerExtension],
+            )
+        )
 
-        result: dict[str, type] = {}
-        for app_model_name_camel in cls._apps_models_names.values():
-            result[app_model_name_camel] = cast(type, getattr(map_class, app_model_name_camel))
+    @staticmethod
+    def _get_app_models() -> list[type[Model]]:
+        """Get all Django models from all apps except django.contrib"""
 
-        return result
+        app_models: list[type[Model]] = []
+        for app_config in apps.get_app_configs():
+            if app_config.name.startswith("django.contrib"):
+                continue
+
+            app_models.extend(app_config.get_models())
+
+        return app_models
