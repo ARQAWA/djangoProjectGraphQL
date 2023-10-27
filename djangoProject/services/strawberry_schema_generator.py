@@ -1,3 +1,4 @@
+import pprint
 from collections import deque
 from enum import Enum
 from typing import (
@@ -23,7 +24,7 @@ from strawberry_django.optimizer import DjangoOptimizerExtension
 __all__ = ("AsyncAutoGraphQLView",)
 
 ModelPath, AppName, AppModelName, FieldName, IsManyRelation = str, str, str, str, bool
-RelationFieldSetterArgs = tuple[AppModelName, Field[str], type[Model]]
+RelationFieldSetterArgs = tuple[AppModelName, Field, type[Model]]
 
 
 class Mapper:
@@ -47,6 +48,7 @@ class Mapper:
 
         # scheme type dicts
         self._types_by_model_names: dict[AppModelName, type] = {}
+        self._models_by_model_names: dict[AppModelName, type[Model]] = {}
 
         self._relations_setter_queue: deque[RelationFieldSetterArgs] = deque()
 
@@ -124,8 +126,8 @@ class Mapper:
 
         model_name = self._claim_model_name(model)
         related_model = cast(type[Model], field.related_model)
-        related_model_name = self._claim_model_name(related_model)
         self._relations_setter_queue.append((model_name, field, related_model))
+        related_model_name = self._claim_model_name(related_model)
         remote_field = cast(Field, field.remote_field)
         self._relations_setter_queue.append((related_model_name, remote_field, model))
 
@@ -141,8 +143,29 @@ class Mapper:
             field_name = field.name
             field_type = self._types_by_model_names[related_model_name]
 
+            if field.one_to_many or field.many_to_many:
+                field_type = list[field_type]
+
             mapped_type = self._types_by_model_names[model_name]
-            setattr(mapped_type, field_name, field_type)
+            mapped_type.__annotations__[field_name] = field_type
+
+            # pprint.pprint((mapped_type.__name__, mapped_type.__annotations__))
+
+            # ...
+
+    def _apply_strawberry_decorators(self):
+        """Apply strawberry decorators to types"""
+
+        for model_name, model_type in self._types_by_model_names.items():
+            name = model_type.__name__
+            model = self._models_by_model_names[model_name]
+            match self._map_type:
+                case self.Types.Orders:
+                    strawberry.django.order(model, name=name)(model_type)
+                case self.Types.Filters:
+                    strawberry.django.filter(model, name=name, lookups=True)(model_type)
+                case self.Types.Types:
+                    strawberry.django.type(model, name=name)(model_type)
 
     def _set_type_to_map(self, model: type[Model]) -> None:
         """
@@ -170,20 +193,9 @@ class Mapper:
 
         model_type_name = f"{model_name}{str(self._map_type.value)}"
         self._types_by_model_names[model_name] = type(model_type_name, (), {"__annotations__": field_dict})
+        self._models_by_model_names[model_name] = model
 
-        match self._map_type:
-            case self.Types.Orders:
-                strawberry.django.order(model, name=model_type_name)(self._types_by_model_names[model_name])
-            case self.Types.Filters:
-                (
-                    strawberry.django.filter(model, name=model_type_name, lookups=True)(
-                        self._types_by_model_names[model_name]
-                    )
-                )
-            case self.Types.Types:
-                strawberry.django.type(model, name=model_type_name)(self._types_by_model_names[model_name])
-
-    def register_tpyes_from_models(self, models: list[type[Model]]) -> "Mapper":
+    def register_types_from_models(self, models: list[type[Model]]) -> "Mapper":
         """
         Register models dicts
 
@@ -194,6 +206,7 @@ class Mapper:
             self._set_type_to_map(model)
 
         self._apply_fields_relations()
+        self._apply_strawberry_decorators()
 
         return self
 
@@ -203,10 +216,18 @@ class AsyncAutoGraphQLView:
 
     @classmethod
     def as_view(cls) -> Callable[..., HttpResponse]:
-        app_models = cls._get_app_models()
-        filters = Mapper(Mapper.Types.Filters).register_tpyes_from_models(app_models).map
-        orders = Mapper(Mapper.Types.Orders).register_tpyes_from_models(app_models).map
-        types = Mapper(Mapper.Types.Types).register_tpyes_from_models(app_models).map
+        """Generate GraphQL view based on Django models, exclude django.contrib"""
+
+        app_models: list[type[Model]] = []
+        for app_config in apps.get_app_configs():
+            if app_config.name.startswith("django.contrib"):
+                continue
+
+            app_models.extend(app_config.get_models())
+
+        filters = Mapper(Mapper.Types.Filters).register_types_from_models(app_models).map
+        orders = Mapper(Mapper.Types.Orders).register_types_from_models(app_models).map
+        types = Mapper(Mapper.Types.Types).register_types_from_models(app_models).map
 
         # generate query
         type_dict = {
@@ -225,16 +246,3 @@ class AsyncAutoGraphQLView:
                 extensions=[DjangoOptimizerExtension],
             )
         )
-
-    @staticmethod
-    def _get_app_models() -> list[type[Model]]:
-        """Get all Django models from all apps except django.contrib"""
-
-        app_models: list[type[Model]] = []
-        for app_config in apps.get_app_configs():
-            if app_config.name.startswith("django.contrib"):
-                continue
-
-            app_models.extend(app_config.get_models())
-
-        return app_models
