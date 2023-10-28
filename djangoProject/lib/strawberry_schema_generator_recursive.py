@@ -1,3 +1,4 @@
+import copy
 from collections import deque
 from enum import Enum
 from typing import (
@@ -12,34 +13,24 @@ import strawberry.django
 from django.apps import apps
 from django.db.models import (
     Field,
-    ForeignKey,
     ManyToManyField,
     Model,
 )
 from django.db.models.options import Options
 from django.http import HttpResponse
 from strawberry.django.views import AsyncGraphQLView
-from strawberry_django.optimizer import DjangoOptimizerExtension
 
 __all__ = ("AsyncAutoGraphQLView",)
 
-ModelPath, AppName, AppModelName, FieldName, IsManyRelation = str, str, str, str, bool
+TypeOrder, TypeFilter, TypeObj = type, type, type
+ModelPath, AppName, AppModelName, FieldName = str, str, str, str
 RelationFieldSetterArgs = tuple[AppModelName, Field, type[Model]]  # type: ignore
 
 
 class Mapper:
     """Django models to strawberry types mapper"""
 
-    class Types(Enum):
-        """Enum for mapping types"""
-
-        Types = "Types"
-        Filters = "Filters"
-        Orders = "Orders"
-
-    def __init__(self, map_type: Types):
-        self._map_type = map_type
-
+    def __init__(self):
         # apps names
         self._apps_names_unique: set[AppName] = set()
         self._app_name_by_app_config_names: dict[str, AppName] = {}
@@ -48,14 +39,15 @@ class Mapper:
         self._model_names_unique: set[AppModelName] = set()
         self._model_names_by_model_paths: dict[ModelPath, AppModelName] = {}
 
-        # scheme type dicts
-        self._types_by_model_names: dict[AppModelName, type] = {}
+        # type object maps
         self._models_by_model_names: dict[AppModelName, type[Model]] = {}
-
         self._relations_setter_queue: deque[RelationFieldSetterArgs] = deque()
+        self._types_by_model_names: dict[AppModelName, TypeObj] = {}
+        self._orders_by_model_names: dict[AppModelName, TypeOrder] = {}
+        self._filters_by_model_names: dict[AppModelName, TypeFilter] = {}
 
     @property
-    def map(self) -> dict[AppModelName, type]:
+    def types_map(self) -> dict[AppModelName, type]:
         return self._types_by_model_names
 
     @staticmethod
@@ -122,10 +114,9 @@ class Mapper:
         related_model = cast(type[Model], field.related_model)
         self._relations_setter_queue.append((self._claim_model_name(model), field, related_model))
 
-        if isinstance(field, ForeignKey):
-            related_model_name = self._claim_model_name(related_model)
-            remote_field = cast(Field, field.remote_field)
-            self._relations_setter_queue.append((related_model_name, remote_field, model))
+        related_model_name = self._claim_model_name(related_model)
+        remote_field = cast(Field, field.remote_field)
+        self._relations_setter_queue.append((related_model_name, remote_field, model))
 
     def _apply_fields_relations(self) -> None:
         """Register relations fields"""
@@ -133,7 +124,6 @@ class Mapper:
         while len(self._relations_setter_queue):
             model_name, field, related_model = self._relations_setter_queue.popleft()
 
-            self._set_type_to_map(related_model)
             related_model_name = self._claim_model_name(related_model)
 
             field_name = field.name
@@ -143,21 +133,31 @@ class Mapper:
                 field_type = list[field_type]
 
             mapped_type = self._types_by_model_names[model_name]
-            mapped_type.__annotations__[field_name] = field_type
+            # mapped_type.__annotations__[field_name] = field_type
 
-    def _apply_strawberry_decorators(self):
+            setattr(
+                mapped_type,
+                field_name,
+                strawberry.field(name=related_model_name, graphql_type=field_type)
+            )
+
+    def _apply_strawberry_decorators_for_types(self):
         """Apply strawberry decorators to types"""
 
-        for model_name, model_type in self._types_by_model_names.items():
-            name = model_type.__name__
+        for model_name, type_obj in self._types_by_model_names.items():
             model = self._models_by_model_names[model_name]
-            match self._map_type:
-                case self.Types.Orders:
-                    strawberry.django.order(model, name=name)(model_type)
-                case self.Types.Filters:
-                    strawberry.django.filter(model, name=name)(model_type)
-                case self.Types.Types:
-                    strawberry.django.type(model, name=name)(model_type)
+            order_obj = self._orders_by_model_names[model_name]
+            filter_obj = self._filters_by_model_names[model_name]
+
+            strawberry.django.order(model, name=order_obj.__name__)(order_obj)
+            strawberry.django.filter(model, name=filter_obj.__name__, lookups=True)(filter_obj)
+            strawberry.django.type(
+                model,
+                name=type_obj.__name__,
+                filters=filter_obj,
+                order=order_obj,
+                pagination=True,
+            )(type_obj)
 
     def _set_type_to_map(self, model: type[Model]) -> None:
         """
@@ -167,25 +167,29 @@ class Mapper:
         """
 
         model_name = self._claim_model_name(model)
-
-        if model_name in self._types_by_model_names:
-            return
+        self._models_by_model_names[model_name] = model
 
         model_meta = self._get_meta(model)
 
+        # prepare field dict for type object annotations
         field_dict: dict[FieldName, Any] = {}
         for field in model_meta.fields:  # type: Field
-            if not field.hidden:
+            if field.hidden:
+                continue
+            elif field.is_relation:
+                self._put_relation_field(model, field)
+            else:
                 field_dict[field.name] = strawberry.auto
-                if field.is_relation and not field.one_to_one:
-                    self._put_relation_field(model, field)
 
+        # put many to many fields to queue for later processing
         for mm_field in model_meta.many_to_many:  # type: ManyToManyField
             self._put_relation_field(model, mm_field)
 
-        model_type_name = f"{model_name}{str(self._map_type.value)}"
-        self._types_by_model_names[model_name] = type(model_type_name, (), {"__annotations__": field_dict})
-        self._models_by_model_names[model_name] = model
+        obj_dict = {"__annotations__": field_dict}
+
+        self._types_by_model_names[model_name] = type(f"{model_name}Types", (), copy.deepcopy(obj_dict))
+        self._orders_by_model_names[model_name] = type(f"{model_name}Orders", (), copy.deepcopy(obj_dict))
+        self._filters_by_model_names[model_name] = type(f"{model_name}Filters", (), copy.deepcopy(obj_dict))
 
     def register_types_from_models(self, models: list[type[Model]]) -> "Mapper":
         """
@@ -198,9 +202,17 @@ class Mapper:
             self._set_type_to_map(model)
 
         self._apply_fields_relations()
-        self._apply_strawberry_decorators()
+        self._apply_strawberry_decorators_for_types()
 
         return self
+
+
+class MapperTypes(Enum):
+    """Enum for mapping types"""
+
+    Types = "Types"
+    Filters = "Filters"
+    Orders = "Orders"
 
 
 class AsyncAutoGraphQLView:
@@ -217,24 +229,17 @@ class AsyncAutoGraphQLView:
 
             app_models.extend(app_config.get_models())
 
-        filters = Mapper(Mapper.Types.Filters).register_types_from_models(app_models).map
-        orders = Mapper(Mapper.Types.Orders).register_types_from_models(app_models).map
-        types = Mapper(Mapper.Types.Types).register_types_from_models(app_models).map
+        types_map = Mapper().register_types_from_models(app_models).types_map
 
         # generate query
         type_dict = {
-            type_name: strawberry.django.field(
-                graphql_type=list[types[type_name]],
-                filters=filters[type_name],
-                order=orders[type_name],
-                pagination=True,
-            )  # type: ignore
-            for type_name in types
+            type_name: strawberry.django.field(graphql_type=list[type_obj])  # type: ignore
+            for type_name, type_obj in types_map.items()
         }
 
         return AsyncGraphQLView.as_view(
             schema=strawberry.Schema(
                 query=strawberry.type()(type("AutoGeneratedQuery", (), type_dict)),
-                extensions=[DjangoOptimizerExtension],
+                # extensions=[DjangoOptimizerExtension],
             )
         )
