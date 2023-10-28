@@ -42,7 +42,3 @@ plugins = ["mypy_django_plugin.main"]
 
 [tool.django-stubs]
 django_settings_module = "djangoProject.settings"
-strict_settings = true
-
-[mypy.plugins.django-stubs]
-django_settings_module = "djangoProject.settings"
