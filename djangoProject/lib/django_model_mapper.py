@@ -18,7 +18,6 @@ from django.db.models import (
 )
 from django.db.models.options import Options
 from strawberry.django.views import AsyncGraphQLView
-from strawberry_django.optimizer import DjangoOptimizerExtension
 
 # type aliases
 AppName = Annotated[str, "AppName"]
@@ -157,6 +156,6 @@ class AsyncAutoGraphQLView:
         return AsyncGraphQLView.as_view(
             schema=strawberry.Schema(
                 query=query_object,
-                extensions=[DjangoOptimizerExtension],
+                # extensions=[DjangoOptimizerExtension],
             )
         )

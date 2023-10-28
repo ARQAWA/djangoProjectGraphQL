@@ -1,4 +1,5 @@
 asgiref==3.7.2
+autoflake==2.2.1
 black==23.10.1
 click==8.1.7
 Django==4.2.6
@@ -14,6 +15,7 @@ mypy-extensions==1.0.0
 packaging==23.2
 pathspec==0.11.2
 platformdirs==3.11.0
+pyflakes==3.1.0
 python-dateutil==2.8.2
 six==1.16.0
 sqlparse==0.4.4

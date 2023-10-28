@@ -54,9 +54,9 @@ class Mapper:
         return self.model_names.setdefault(model_path, f"{self._register_app_name(model)}{meta.object_name}")
 
     def _enqueue_relation(
-            self,
-            model: TypeObj,
-            field: Field,  # type: ignore
+        self,
+        model: TypeObj,
+        field: Field,  # type: ignore
     ) -> None:
         related_model = cast(TypeObj, field.related_model)
         self.relations_queue.append((self._register_model_name(model), field, related_model))

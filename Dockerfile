@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED 1
-ENV DJANGO_SETTINGS_MODULE=djangoProject.settings
+ENV DJANGO_SETTINGS_MODULE "djangoProject.settings"
 
 WORKDIR /app
 COPY . /app/

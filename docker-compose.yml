@@ -3,11 +3,11 @@ version: '3.8'
 services:
   web:
     build: .
-    command: /bin/bash -c "python manage.py migrate && gunicorn djangoProject.wsgi:application --bind 0.0.0.0:8000"
-    volumes:
-      - ./:/app
+    command: /bin/bash -c "python manage.py migrate && gunicorn djangoProject.wsgi:application --bind 0.0.0.0:80"
+#    volumes:
+#      - ./:/app
     ports:
-      - "8000:8000"
+      - "8000:80"
     environment:
       - DEBUG=false
       - SECRET_KEY=afoauyfasf19247612945211250!3125@a)))asd___@!
