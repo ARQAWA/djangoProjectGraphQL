@@ -1,3 +1,4 @@
+import copy
 from collections import deque
 from enum import Enum
 from typing import (
@@ -12,7 +13,6 @@ import strawberry.django
 from django.apps import apps
 from django.db.models import (
     Field,
-    ForeignKey,
     ManyToManyField,
     Model,
 )
@@ -49,10 +49,11 @@ class Mapper:
         self._model_names_by_model_paths: dict[ModelPath, AppModelName] = {}
 
         # scheme type dicts
-        self._types_by_model_names: dict[AppModelName, type] = {}
         self._models_by_model_names: dict[AppModelName, type[Model]] = {}
-
+        self._types_by_model_names: dict[AppModelName, type] = {}
+        self._plain_types_by_model_names: dict[AppModelName, type] = {}
         self._relations_setter_queue: deque[RelationFieldSetterArgs] = deque()
+        self._strawberry_plain_types_by_model_names: dict[AppModelName, type] = {}
 
     @property
     def map(self) -> dict[AppModelName, type]:
@@ -122,10 +123,9 @@ class Mapper:
         related_model = cast(type[Model], field.related_model)
         self._relations_setter_queue.append((self._claim_model_name(model), field, related_model))
 
-        if isinstance(field, ForeignKey):
-            related_model_name = self._claim_model_name(related_model)
-            remote_field = cast(Field, field.remote_field)
-            self._relations_setter_queue.append((related_model_name, remote_field, model))
+        related_model_name = self._claim_model_name(related_model)
+        remote_field = cast(Field, field.remote_field)
+        self._relations_setter_queue.append((related_model_name, remote_field, model))
 
     def _apply_fields_relations(self) -> None:
         """Register relations fields"""
@@ -137,7 +137,7 @@ class Mapper:
             related_model_name = self._claim_model_name(related_model)
 
             field_name = field.name
-            field_type = self._types_by_model_names[related_model_name]
+            field_type = self._get_plain_strawberry_type(related_model_name)
 
             if field.one_to_many or field.many_to_many:
                 field_type = list[field_type]
@@ -145,19 +145,39 @@ class Mapper:
             mapped_type = self._types_by_model_names[model_name]
             mapped_type.__annotations__[field_name] = field_type
 
-    def _apply_strawberry_decorators(self):
-        """Apply strawberry decorators to types"""
+    def _get_plain_strawberry_type(self, model_name: AppModelName) -> type:
+        """
+        Get plain strawberry type
 
-        for model_name, model_type in self._types_by_model_names.items():
-            name = model_type.__name__
-            model = self._models_by_model_names[model_name]
-            match self._map_type:
-                case self.Types.Orders:
-                    strawberry.django.order(model, name=name)(model_type)
-                case self.Types.Filters:
-                    strawberry.django.filter(model, name=name)(model_type)
-                case self.Types.Types:
-                    strawberry.django.type(model, name=name)(model_type)
+        :param model_name: model name
+        :return: plain strawberry type
+        """
+
+        strawberry_plain_type = self._strawberry_plain_types_by_model_names.get(model_name)
+        if strawberry_plain_type is None:
+            strawberry_plain_type = copy.deepcopy(self._plain_types_by_model_names[model_name])
+            self._apply_strawberry_decorator(model_name, strawberry_plain_type)
+            self._strawberry_plain_types_by_model_names[model_name] = strawberry_plain_type
+
+        return strawberry_plain_type
+
+    def _apply_strawberry_decorator(self, model_name: AppModelName, model_type) -> None:
+        """
+        Apply strawberry decorator
+
+        :param model_name: model name
+        :param model_type: model type
+        """
+
+        name = model_type.__name__
+        model = self._models_by_model_names[model_name]
+        match self._map_type:
+            case self.Types.Orders:
+                strawberry.django.order(model, name=name)(model_type)
+            case self.Types.Filters:
+                strawberry.django.filter(model, name=name, lookups=True)(model_type)
+            case self.Types.Types:
+                strawberry.django.type(model, name=name)(model_type)
 
     def _set_type_to_map(self, model: type[Model]) -> None:
         """
@@ -170,6 +190,8 @@ class Mapper:
 
         if model_name in self._types_by_model_names:
             return
+
+        self._models_by_model_names[model_name] = model
 
         model_meta = self._get_meta(model)
 
@@ -185,20 +207,24 @@ class Mapper:
 
         model_type_name = f"{model_name}{str(self._map_type.value)}"
         self._types_by_model_names[model_name] = type(model_type_name, (), {"__annotations__": field_dict})
-        self._models_by_model_names[model_name] = model
+
+        model_plain_type_name = f"{model_name}{str(self._map_type.value)}Plain"
+        self._plain_types_by_model_names[model_name] = type(model_plain_type_name, (), {"__annotations__": field_dict})
 
     def register_types_from_models(self, models: list[type[Model]]) -> "Mapper":
         """
         Register models dicts
 
         :param models: Django models types
+        :return: self
         """
 
         for model in models:
             self._set_type_to_map(model)
-
         self._apply_fields_relations()
-        self._apply_strawberry_decorators()
+
+        for model_name, model_type in self._types_by_model_names.items():
+            self._apply_strawberry_decorator(model_name, model_type)
 
         return self
 
