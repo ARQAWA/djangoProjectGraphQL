@@ -9,6 +9,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DEBUG=true
+      - DEBUG=false
       - SECRET_KEY=afoauyfasf19247612945211250!3125@a)))asd___@!
       - DJANGO_SETTINGS_MODULE=djangoProject.settings
