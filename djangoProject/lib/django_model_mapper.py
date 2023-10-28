@@ -43,21 +43,21 @@ class Mapper:
         self._compiled_types: set[AppModelName] = set()
 
     @staticmethod
-    def _get_meta(model: TypeObj) -> Options:  # type: ignore
+    def _get_meta(model: DjangoModel) -> Options:  # type: ignore
         return cast(Options, getattr(model, "_meta"))  # type: ignore
 
-    def _register_app_name(self, model: TypeObj) -> AppName:
+    def _register_app_name(self, model: DjangoModel) -> AppName:
         app_config_name = self._get_meta(model).app_config.name
         return self.apps_names.setdefault(app_config_name, app_config_name.replace("_", " ").title().replace(" ", ""))
 
-    def _register_model_name(self, model: TypeObj) -> AppModelName:
+    def _register_model_name(self, model: DjangoModel) -> AppModelName:
         meta = self._get_meta(model)
         model_path = f"{meta.app_config.name}.{meta.object_name}"
         return self.model_names.setdefault(model_path, f"{self._register_app_name(model)}{meta.object_name}")
 
     def _enqueue_relation(
         self,
-        model: TypeObj,
+        model: DjangoModel,
         field: Field,  # type: ignore
     ) -> None:
         related_model = cast(DjangoModel, field.related_model)
