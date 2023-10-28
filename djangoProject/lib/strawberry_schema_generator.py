@@ -172,12 +172,12 @@ class Mapper:
         name = model_type.__name__
         model = self._models_by_model_names[model_name]
         match self._map_type:
-            case self.Types.Orders:
+            case self._map_type.Orders:
                 strawberry.django.order(model, name=name)(model_type)
-            case self.Types.Filters:
+            case self._map_type.Filters:
                 strawberry.django.filter(model, name=name, lookups=True)(model_type)
-            case self.Types.Types:
-                strawberry.django.type(model, name=name)(model_type)
+            case self._map_type.Types:
+                strawberry.django.type(model, name=name, pagination=True)(model_type)
 
     def _set_type_to_map(self, model: type[Model]) -> None:
         """
@@ -253,7 +253,6 @@ class AsyncAutoGraphQLView:
                 graphql_type=list[types[type_name]],
                 filters=filters[type_name],
                 order=orders[type_name],
-                pagination=True,
             )  # type: ignore
             for type_name in types
         }
