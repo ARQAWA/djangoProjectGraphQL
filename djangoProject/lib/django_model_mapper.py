@@ -10,6 +10,7 @@ from typing import (
     cast,
 )
 
+import inflection
 import strawberry
 from django.apps import apps
 from django.db.models import (
@@ -26,7 +27,6 @@ ModelPath = Annotated[str, "ModelPath"]
 FieldName = Annotated[str, "FieldName"]
 DjangoModel = Annotated[Type[Model], "DjangoModel"]
 TypeObj = Annotated[Any, "TypeObj"]
-
 RelationFieldSetterArgs = tuple[AppModelName, Field, TypeObj]  # type: ignore
 
 
@@ -41,6 +41,21 @@ class Mapper:
         self.filters: Dict[AppModelName, TypeObj] = {}
         self.relations_queue: deque[RelationFieldSetterArgs] = deque()
         self._compiled_types: set[AppModelName] = set()
+        self._unique_app_names: set[str] = set()
+        self._unique_model_names: set[str] = set()
+
+    @staticmethod
+    def _claim_unique_str(str_base: str, uniques: set[str]) -> str:
+        """Claim unique string by adding number to base string"""
+
+        count = 0
+        result = str_base
+        while True:
+            if result not in uniques:
+                uniques.add(result)
+                return result
+            count += 1
+            result = f"{str_base}{count}"
 
     @staticmethod
     def _get_meta(model: DjangoModel) -> Options:  # type: ignore
@@ -48,12 +63,21 @@ class Mapper:
 
     def _register_app_name(self, model: DjangoModel) -> AppName:
         app_config_name = self._get_meta(model).app_config.name
-        return self.apps_names.setdefault(app_config_name, app_config_name.replace("_", " ").title().replace(" ", ""))
+        app_name = self.apps_names.get(app_config_name)
+        if app_name is None:
+            app_name = self._claim_unique_str(inflection.camelize(app_config_name), self._unique_app_names)
+        return app_name
 
     def _register_model_name(self, model: DjangoModel) -> AppModelName:
-        meta = self._get_meta(model)
-        model_path = f"{meta.app_config.name}.{meta.object_name}"
-        return self.model_names.setdefault(model_path, f"{self._register_app_name(model)}{meta.object_name}")
+        app_config_name = self._get_meta(model).app_config.name
+        model_object_name = cast(str, self._get_meta(model).object_name)
+        model_path = f"{app_config_name}.{model_object_name}"
+        model_name = self.model_names.get(model_path)
+        if model_name is None:
+            model_name = self.model_names[model_path] = self._claim_unique_str(
+                f"{self._register_app_name(model)}{inflection.camelize(model_object_name)}", self._unique_model_names
+            )
+        return model_name
 
     def _enqueue_relation(
         self,
