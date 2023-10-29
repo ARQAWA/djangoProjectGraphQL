@@ -32,16 +32,15 @@ RelationFieldSetterArgs = tuple[AppModelName, Field, TypeObj]  # type: ignore
 
 class Mapper:
     def __init__(self) -> None:
-        self.apps_names: Dict[str, AppName] = {}
-        self.model_names: Dict[ModelPath, AppModelName] = {}
-        self.models: Dict[AppModelName, DjangoModel] = {}
         self.types: Dict[AppModelName, TypeObj] = {}
-        self.orders: Dict[AppModelName, TypeObj] = {}
-        self.filters: Dict[AppModelName, TypeObj] = {}
-        self.relations_queue: deque[RelationFieldSetterArgs] = deque()
-        self._compiled_types: set[AppModelName] = set()
+        self._models: Dict[AppModelName, DjangoModel] = {}
+        self._orders: Dict[AppModelName, TypeObj] = {}
+        self._filters: Dict[AppModelName, TypeObj] = {}
+        self._apps_names: Dict[str, AppName] = {}
+        self._model_names: Dict[ModelPath, AppModelName] = {}
         self._unique_app_names: set[str] = set()
         self._unique_model_names: set[str] = set()
+        self._relations_queue: deque[RelationFieldSetterArgs] = deque()
 
     @staticmethod
     def _claim_unique_str(str_base: str, uniques: set[str]) -> str:
@@ -62,7 +61,7 @@ class Mapper:
 
     def _register_app_name(self, model: DjangoModel) -> AppName:
         app_config_name = self._get_meta(model).app_config.name
-        app_name = self.apps_names.get(app_config_name)
+        app_name = self._apps_names.get(app_config_name)
         if app_name is None:
             app_name = self._claim_unique_str(inflection.camelize(app_config_name), self._unique_app_names)
         return app_name
@@ -71,9 +70,9 @@ class Mapper:
         app_config_name = self._get_meta(model).app_config.name
         model_object_name = cast(str, self._get_meta(model).object_name)
         model_path = f"{app_config_name}.{model_object_name}"
-        model_name = self.model_names.get(model_path)
+        model_name = self._model_names.get(model_path)
         if model_name is None:
-            model_name = self.model_names[model_path] = self._claim_unique_str(
+            model_name = self._model_names[model_path] = self._claim_unique_str(
                 f"{self._register_app_name(model)}{inflection.camelize(model_object_name)}", self._unique_model_names
             )
         return model_name
@@ -84,11 +83,11 @@ class Mapper:
         field: Field,  # type: ignore
     ) -> None:
         related_model = cast(TypeObj, field.related_model)
-        self.relations_queue.append((self._register_model_name(model), field, related_model))
+        self._relations_queue.append((self._register_model_name(model), field, related_model))
 
     def _process_relations(self) -> None:
-        while self.relations_queue:
-            model_name, field, related_model = self.relations_queue.popleft()
+        while self._relations_queue:
+            model_name, field, related_model = self._relations_queue.popleft()
             related_model_name = self._register_model_name(related_model)
 
             field_type = self.types[related_model_name]
@@ -104,7 +103,7 @@ class Mapper:
 
     def _create_type(self, model: DjangoModel) -> None:
         model_name = self._register_model_name(model)
-        self.models[model_name] = model
+        self._models[model_name] = model
 
         fields_dict: Dict[FieldName, Any] = {}
         for field in self._get_meta(model).fields:
@@ -121,8 +120,8 @@ class Mapper:
         object_dict = {"__annotations__": fields_dict}
 
         self.types[model_name] = type(f"{model_name}Types", (), copy.deepcopy(object_dict))
-        self.orders[model_name] = type(f"{model_name}Orders", (), copy.deepcopy(object_dict))
-        self.filters[model_name] = type(f"{model_name}Filters", (), copy.deepcopy(object_dict))
+        self._orders[model_name] = type(f"{model_name}Orders", (), copy.deepcopy(object_dict))
+        self._filters[model_name] = type(f"{model_name}Filters", (), copy.deepcopy(object_dict))
 
     def register_models(self, models: List[DjangoModel]) -> None:
         for model in models:
@@ -131,9 +130,9 @@ class Mapper:
         self._process_relations()
 
         for model_name, type_obj in self.types.items():
-            model = self.models[model_name]
-            order_obj = self.orders[model_name]
-            filter_obj = self.filters[model_name]
+            model = self._models[model_name]
+            order_obj = self._orders[model_name]
+            filter_obj = self._filters[model_name]
             strawberry.django.order(model, name=order_obj.__name__)(order_obj)
             strawberry.django.filter(model, name=filter_obj.__name__, lookups=True)(filter_obj)
             strawberry.django.type(
