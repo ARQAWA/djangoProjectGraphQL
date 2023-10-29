@@ -65,7 +65,10 @@ class Mapper:
         app_config_name = self._get_meta(model).app_config.name
         app_name = self._apps_names.get(app_config_name)
         if app_name is None:
-            app_name = self._claim_unique_str(inflection.camelize(app_config_name), self._unique_app_names)
+            app_name = self._apps_names[app_config_name] = self._claim_unique_str(
+                inflection.camelize(app_config_name),
+                self._unique_app_names,
+            )
         return app_name
 
     def _register_model_name(self, model: DjangoModel) -> AppModelName:
@@ -75,7 +78,8 @@ class Mapper:
         model_name = self._model_names.get(model_path)
         if model_name is None:
             model_name = self._model_names[model_path] = self._claim_unique_str(
-                f"{self._register_app_name(model)}{inflection.camelize(model_object_name)}", self._unique_model_names
+                f"{self._register_app_name(model)}{inflection.camelize(model_object_name)}",
+                self._unique_model_names,
             )
         return model_name
 
