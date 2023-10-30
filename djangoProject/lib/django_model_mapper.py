@@ -91,6 +91,10 @@ class Mapper:
         related_model = cast(DjangoModel, field.related_model)
         self._relations_queue.append((self._register_model_name(model), field, related_model))
 
+        related_model_name = self._register_model_name(related_model)
+        remote_field = cast(Field, field.remote_field)  # type: ignore
+        self._relations_queue.append((related_model_name, remote_field, model))
+
     def _process_relations(self) -> None:
         while self._relations_queue:
             model_name, field, related_model = self._relations_queue.popleft()
@@ -103,7 +107,9 @@ class Mapper:
             if field.one_to_many or field.many_to_many:
                 field_type = cast(Any, List[field_type])  # type: ignore
 
-            del self.types[model_name].__annotations__[field.name]
+            if field.name in self.types[model_name].__annotations__:
+                del self.types[model_name].__annotations__[field.name]
+
             setattr(
                 self.types[model_name],
                 field.name,

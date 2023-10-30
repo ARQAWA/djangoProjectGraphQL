@@ -24,19 +24,35 @@ query ExampleQuery {
   ) {
     title
     summary
-    TestDjangoGraphqlGenre(pagination: {limit: 3}) {
-      name
-    }
-    TestDjangoGraphqlAuthor {
-      lastName
-      firstName
-      dateOfBirth
-    }
     TestDjangoGraphqlPublisher {
       name
       address
     }
     publishDate
+    TestDjangoGraphqlAuthor {
+      lastName
+      firstName
+      dateOfBirth
+    }
+    TestDjangoGraphqlGenre(pagination: {limit: 3}) {
+      name
+      TestDjangoGraphqlBook(pagination: {limit: 3}) {
+        title
+        summary
+      }
+    }
+  }
+  TestDjangoGraphqlGenre(pagination: {limit: 10}) {
+    name
+    TestDjangoGraphqlBook(pagination: {limit: 5}) {
+      TestDjangoGraphqlAuthor {
+        firstName
+        lastName
+        dateOfBirth
+      }
+      title
+      publishDate
+    }
   }
 }
 ```

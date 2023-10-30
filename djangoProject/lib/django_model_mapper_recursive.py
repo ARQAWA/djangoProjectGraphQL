@@ -88,6 +88,10 @@ class Mapper:
         related_model = cast(TypeObj, field.related_model)
         self._relations_queue.append((self._register_model_name(model), field, related_model))
 
+        related_model_name = self._register_model_name(related_model)
+        remote_field = cast(Field, field.remote_field)  # type: ignore
+        self._relations_queue.append((related_model_name, remote_field, model))
+
     def _process_relations(self) -> None:
         while self._relations_queue:
             model_name, field, related_model = self._relations_queue.popleft()
