@@ -6,7 +6,7 @@ authors = ["Аркадий <chuark@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "3.11.5"
+python = "3.11.6"
 django = "^4.2.6"
 strawberry-graphql = "^0.211.1"
 strawberry-graphql-django = "^0.21.0"
@@ -18,6 +18,8 @@ black = "^23.10.1"
 mypy = "^1.6.1"
 django-stubs = "^4.2.6"
 autoflake = "^2.2.1"
+python-jose = "^3.3.0"
+requests = {extras = ["security"], version = "^2.31.0"}
 
 [build-system]
 requires = ["poetry-core"]
@@ -42,4 +44,4 @@ strict = true
 plugins = ["mypy_django_plugin.main"]
 
 [tool.django-stubs]
-django_settings_module = "djangoProject.settings"
+django_settings_module = "project_root.settings"

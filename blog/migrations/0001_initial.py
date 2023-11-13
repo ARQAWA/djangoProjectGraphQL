@@ -40,7 +40,7 @@ class Migration(migrations.Migration):
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="author",
                         related_query_name="author",
-                        to="app2.sign",
+                        to="blog.sign",
                     ),
                 ),
             ],
@@ -55,10 +55,10 @@ class Migration(migrations.Migration):
                 (
                     "author",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE, related_name="articles", to="app2.author"
+                        on_delete=django.db.models.deletion.CASCADE, related_name="articles", to="blog.author"
                     ),
                 ),
-                ("tags", models.ManyToManyField(related_name="articles", to="app2.tag")),
+                ("tags", models.ManyToManyField(related_name="articles", to="blog.tag")),
             ],
         ),
     ]

@@ -9,15 +9,15 @@ from django.db import (
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.migrations.state import StateApps
 
-from test_django_graphql import models as test_django_graphql_models
+from book_catalogue import models as book_catalogue_models
 
 
 # noinspection PyPep8Naming
 def create_data(apps: StateApps, _schema_editor: BaseDatabaseSchemaEditor) -> None:
-    Author = cast(type[test_django_graphql_models.Author], apps.get_model("test_django_graphql", "Author"))
-    Publisher = cast(type[test_django_graphql_models.Publisher], apps.get_model("test_django_graphql", "Publisher"))
-    Genre = cast(type[test_django_graphql_models.Genre], apps.get_model("test_django_graphql", "Genre"))
-    Book = cast(type[test_django_graphql_models.Book], apps.get_model("test_django_graphql", "Book"))
+    Author = cast(type[book_catalogue_models.Author], apps.get_model("book_catalogue", "Author"))
+    Publisher = cast(type[book_catalogue_models.Publisher], apps.get_model("book_catalogue", "Publisher"))
+    Genre = cast(type[book_catalogue_models.Genre], apps.get_model("book_catalogue", "Genre"))
+    Book = cast(type[book_catalogue_models.Book], apps.get_model("book_catalogue", "Book"))
 
     with transaction.atomic():
         authors = [
@@ -57,7 +57,7 @@ def create_data(apps: StateApps, _schema_editor: BaseDatabaseSchemaEditor) -> No
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("test_django_graphql", "0001_initial"),
+        ("book_catalogue", "0001_initial"),
     ]
 
     operations = [migrations.RunPython(create_data, migrations.RunPython.noop)]

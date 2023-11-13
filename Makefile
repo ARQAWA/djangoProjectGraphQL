@@ -1,5 +1,5 @@
 run_format:
-	poetry run sh run_format.sh
+	SECRET_KEY=123 poetry run sh run_format.sh
 
 freeze:
-	pip freeze > requirements.txt
+	poetry run pip freeze > requirements.txt

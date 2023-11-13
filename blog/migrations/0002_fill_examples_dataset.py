@@ -10,15 +10,15 @@ from django.db import (
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.migrations.state import StateApps
 
-from app2 import models as app2_models
+from blog import models as blog_models
 
 
 # noinspection PyPep8Naming
 def create_data(apps: StateApps, _schema_editor: BaseDatabaseSchemaEditor) -> None:
-    Sign = cast(type[app2_models.Sign], apps.get_model("app2", "Sign"))
-    Author = cast(type[app2_models.Author], apps.get_model("app2", "Author"))
-    Tag = cast(type[app2_models.Tag], apps.get_model("app2", "Tag"))
-    Article = cast(type[app2_models.Article], apps.get_model("app2", "Article"))
+    Sign = cast(type[blog_models.Sign], apps.get_model("blog", "Sign"))
+    Author = cast(type[blog_models.Author], apps.get_model("blog", "Author"))
+    Tag = cast(type[blog_models.Tag], apps.get_model("blog", "Tag"))
+    Article = cast(type[blog_models.Article], apps.get_model("blog", "Article"))
 
     with transaction.atomic():
         signs = [
@@ -54,7 +54,7 @@ def create_data(apps: StateApps, _schema_editor: BaseDatabaseSchemaEditor) -> No
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("app2", "0001_initial"),
+        ("blog", "0001_initial"),
     ]
 
     operations = [migrations.RunPython(create_data, migrations.RunPython.noop)]

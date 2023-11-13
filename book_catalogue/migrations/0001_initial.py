@@ -22,9 +22,6 @@ class Migration(migrations.Migration):
                 ("date_of_birth", models.DateField()),
                 ("date_of_death", models.DateField(null=True)),
             ],
-            options={
-                "db_table": "app1_author",
-            },
         ),
         migrations.CreateModel(
             name="Genre",
@@ -32,9 +29,6 @@ class Migration(migrations.Migration):
                 ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("name", models.CharField(max_length=100)),
             ],
-            options={
-                "db_table": "app1_genre",
-            },
         ),
         migrations.CreateModel(
             name="Publisher",
@@ -43,9 +37,6 @@ class Migration(migrations.Migration):
                 ("name", models.CharField(max_length=255)),
                 ("address", models.TextField()),
             ],
-            options={
-                "db_table": "app1_publisher",
-            },
         ),
         migrations.CreateModel(
             name="Book",
@@ -59,22 +50,19 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="books",
-                        to="test_django_graphql.author",
+                        to="book_catalogue.author",
                     ),
                 ),
-                ("genres", models.ManyToManyField(related_name="books", to="test_django_graphql.genre")),
+                ("genres", models.ManyToManyField(related_name="books", to="book_catalogue.genre")),
                 (
                     "publisher",
                     models.ForeignKey(
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="books",
-                        to="test_django_graphql.publisher",
+                        to="book_catalogue.publisher",
                     ),
                 ),
             ],
-            options={
-                "db_table": "app1_book",
-            },
         ),
     ]
